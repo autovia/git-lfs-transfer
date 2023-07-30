@@ -14,12 +14,17 @@ The command is usually not invoked directly by the end user. The UI for the [GIT
 
 ### Installing
 
+#### From release
+
+- Download the latest version from [releases](https://github.com/autovia/git-lfs-transfer/releases)
+- On Linux copy the `bin/git-lfs-transfer` binary to `usr/local/bin`
+
 #### From source
 
 - Ensure you have the latest version of Go, SSH server and Git installed.
 - Clone the repository
-- Run `go build -o git-lfs-transfer main.go`.
-- Place the `git-lfs-transfer` binary on your system’s executable `$PATH` or equivalent.
+- Run `make build`
+- On Linux copy the `bin/git-lfs-transfer` binary to `usr/local/bin`
 
 ## License
 
