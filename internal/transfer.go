@@ -44,6 +44,13 @@ func Transfer(r io.Reader, w io.Writer, args []string) error {
 			// nothing to read, args empty
 			continue
 		}
+		if len(c.req.args) > 2 {
+			if strings.HasPrefix(c.req.args[2], "hash-algo=") {
+				if c.req.args[2] != "hash-algo=sha256" {
+					return c.SendMessage([]string{"status 400"}, []string{"unsupported hash algorithm"})
+				}
+			}
+		}
 		if c.req.args[0] == "quit" {
 			err = c.End()
 			if err != nil {
@@ -58,17 +65,19 @@ func Transfer(r io.Reader, w io.Writer, args []string) error {
 			}
 		}
 		if c.req.args[0] == "list-lock" || c.req.args[0] == "list-locks" {
-			msgs, _ := c.fs.listLocks()
-
+			msgs, err := c.fs.listLocks()
+			if err != nil {
+				return c.SendMessage([]string{"status 400"}, []string{fmt.Sprintf("%s", err)})
+			}
 			err = c.SendMessage([]string{"status 202"}, msgs)
 			if err != nil {
 				return err
 			}
 		}
 		if c.req.args[0] == "batch" {
-			files := []string{}
-			for _, line := range c.req.lines {
-				files = append(files, fmt.Sprintf("%s %s", line, cmd))
+			files, err := c.fs.batchObjects(cmd)
+			if err != nil {
+				return c.SendMessage([]string{"status 400"}, []string{fmt.Sprintf("%s", err)})
 			}
 			err = c.SendMessage([]string{"status 200", "hash-algo=sha256"}, files)
 			if err != nil {
@@ -78,10 +87,7 @@ func Transfer(r io.Reader, w io.Writer, args []string) error {
 		if strings.HasPrefix(c.req.args[0], "verify-object") {
 			err = c.fs.verifyObject()
 			if err != nil {
-				err = c.SendMessage([]string{"status 400"}, []string{fmt.Sprintf("%s", err)})
-				if err != nil {
-					return err
-				}
+				return c.SendMessage([]string{"status 400"}, []string{fmt.Sprintf("%s", err)})
 			} else {
 				err = c.SendMessage([]string{"status 200"}, nil)
 				if err != nil {
@@ -107,10 +113,7 @@ func Transfer(r io.Reader, w io.Writer, args []string) error {
 		if strings.HasPrefix(c.req.args[0], "put-object") {
 			err = c.fs.storeObject()
 			if err != nil {
-				err = c.SendMessage([]string{"status 400"}, []string{fmt.Sprintf("%s", err)})
-				if err != nil {
-					return err
-				}
+				return c.SendMessage([]string{"status 400"}, []string{fmt.Sprintf("%s", err)})
 			} else {
 				err = c.SendMessage([]string{"status 200"}, nil)
 				if err != nil {
@@ -121,10 +124,7 @@ func Transfer(r io.Reader, w io.Writer, args []string) error {
 		if strings.HasPrefix(c.req.args[0], "lock") {
 			msgs, err := c.fs.lockObject()
 			if err != nil {
-				err = c.SendMessage([]string{"status 409"}, []string{fmt.Sprintf("%s", err)})
-				if err != nil {
-					return err
-				}
+				return c.SendMessage([]string{"status 409"}, []string{fmt.Sprintf("%s", err)})
 			} else {
 				err = c.SendMessage(append([]string{"status 200"}, msgs...), nil)
 				if err != nil {
@@ -135,10 +135,7 @@ func Transfer(r io.Reader, w io.Writer, args []string) error {
 		if strings.HasPrefix(c.req.args[0], "unlock") {
 			msgs, err := c.fs.unlockObject()
 			if err != nil {
-				err = c.SendMessage([]string{"status 400"}, []string{fmt.Sprintf("%s", err)})
-				if err != nil {
-					return err
-				}
+				return c.SendMessage([]string{"status 400"}, []string{fmt.Sprintf("%s", err)})
 			} else {
 				err = c.SendMessage(append([]string{"status 200"}, msgs...), nil)
 				if err != nil {

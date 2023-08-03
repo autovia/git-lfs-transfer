@@ -6,7 +6,6 @@ import (
 	"encoding/gob"
 	"encoding/hex"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -80,7 +79,7 @@ func (fs *Filesystem) lockObject() ([]string, error) {
 func (fs *Filesystem) listLocks() ([]string, error) {
 	lockpath := filepath.Join(fs.c.path, "locks")
 
-	files, err := ioutil.ReadDir(lockpath)
+	files, err := os.ReadDir(lockpath)
 	if err != nil {
 		return nil, err
 	}
@@ -122,11 +121,18 @@ func (fs *Filesystem) listLocks() ([]string, error) {
 			msgs = append(msgs, fmt.Sprintf("owner %s %s", file.Name(), "theirs"))
 		}
 	}
+
 	return msgs, nil
 }
 
 func (fs *Filesystem) unlockObject() ([]string, error) {
 	var id string
+	var file string
+	for _, arg := range fs.c.req.args {
+		if strings.HasPrefix(arg, "path=") {
+			file = arg[5:]
+		}
+	}
 
 	values := strings.Split(fs.c.req.args[0], " ")
 	if len(values) > 0 {
@@ -142,7 +148,7 @@ func (fs *Filesystem) unlockObject() ([]string, error) {
 
 		msgs := []string{
 			fmt.Sprintf("id=%s", id),
-			fmt.Sprintf("path=%s", lockpath),
+			fmt.Sprintf("path=%s", file),
 			fmt.Sprintf("locked-at=%s", decodedMap["locked-at"]),
 			fmt.Sprintf("ownername=%s", decodedMap["ownername"]),
 		}
@@ -167,12 +173,11 @@ func (fs *Filesystem) getObject() error {
 		if strings.HasPrefix(arg, "get-object") {
 			oid = strings.Split(arg, " ")[1]
 		}
-		if strings.HasPrefix(arg, "size=") {
-			size, err = strconv.ParseInt(arg[5:], 10, 64)
-			if err != nil {
-				return err
-			}
+		fi, err := os.Stat(filepath.Join(fs.c.path, "objects", oid[0:2], oid[2:4], oid))
+		if err != nil {
+			return fmt.Errorf("not found")
 		}
+		size = fi.Size()
 	}
 	f, err := os.OpenFile(filepath.Join(fs.c.path, "objects", oid[0:2], oid[2:4], oid), os.O_RDONLY, 0644)
 	if err != nil {
@@ -234,7 +239,7 @@ func (fs *Filesystem) storeObject() error {
 		}
 	}
 
-	dst, err := ioutil.TempFile(filepath.Join(fs.c.path, "tmp"), "dst")
+	dst, err := os.CreateTemp(filepath.Join(fs.c.path, "tmp"), "dst")
 	if err != nil {
 		return err
 	}
@@ -246,10 +251,11 @@ func (fs *Filesystem) storeObject() error {
 		}
 		return nil
 	}
+
 	hasher := tools.NewHashingReader(fs.c.req.data)
 	written, err := tools.CopyWithCallback(dst, hasher, size, ccb)
 	if err != nil {
-		return err
+		return fmt.Errorf("copyWithCallback %+v %+v, %+v, %s", dst, hasher, size, err)
 	}
 	if actual := hasher.Hash(); actual != oid {
 		return fmt.Errorf("expected OID %s, got %s after %d bytes written", oid, actual, written)
@@ -259,7 +265,7 @@ func (fs *Filesystem) storeObject() error {
 	}
 	fi, err := os.Stat(dst.Name())
 	if err != nil {
-		return err
+		return fmt.Errorf("not found")
 	}
 	if size != fi.Size() {
 		return fmt.Errorf("can not verify file size after upload")
@@ -296,12 +302,36 @@ func (fs *Filesystem) verifyObject() error {
 	}
 	fi, err := os.Stat(filepath.Join(fs.c.path, "objects", oid[0:2], oid[2:4], oid))
 	if err != nil {
-		return err
+		return fmt.Errorf("not found")
 	}
 	if size != fi.Size() {
 		return fmt.Errorf("can not verify file size after upload")
 	}
 	return nil
+}
+
+func (fs *Filesystem) batchObjects(cmdIn string) ([]string, error) {
+	files := []string{}
+	for _, line := range fs.c.req.lines {
+		cmdOut := cmdIn
+		if cmdIn == "download" {
+			oid := strings.Split(line, " ")[0]
+			size, err := strconv.ParseInt(strings.Split(line, " ")[1], 10, 64)
+			if err != nil {
+				return nil, err
+			}
+			fi, err := os.Stat(filepath.Join(fs.c.path, "objects", oid[0:2], oid[2:4], oid))
+			if err != nil {
+				cmdOut = "noop"
+			} else {
+				if size != fi.Size() {
+					cmdOut = "noop"
+				}
+			}
+		}
+		files = append(files, fmt.Sprintf("%s %s", line, cmdOut))
+	}
+	return files, nil
 }
 
 func readLockFile(path string) (map[string]string, error) {
