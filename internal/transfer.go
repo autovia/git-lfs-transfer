@@ -124,9 +124,9 @@ func Transfer(r io.Reader, w io.Writer, args []string) error {
 		if strings.HasPrefix(c.req.args[0], "lock") {
 			msgs, err := c.fs.lockObject()
 			if err != nil {
-				return c.SendMessage([]string{"status 409"}, []string{fmt.Sprintf("%s", err)})
+				return c.SendMessage([]string{"status 409"}, append(msgs, []string{fmt.Sprintf("%s", err)}...))
 			} else {
-				err = c.SendMessage(append([]string{"status 200"}, msgs...), nil)
+				err = c.SendMessage(append([]string{"status 201"}, msgs...), nil)
 				if err != nil {
 					return err
 				}

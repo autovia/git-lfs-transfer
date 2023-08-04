@@ -35,7 +35,19 @@ func (fs *Filesystem) lockObject() ([]string, error) {
 
 	lockpath := filepath.Join(fs.c.path, "locks", id)
 	if _, err := os.Stat(lockpath); err == nil {
-		return nil, err
+		decodedMap, err := readLockFile(lockpath)
+		if err != nil {
+			return nil, err
+		}
+
+		msgs := []string{
+			fmt.Sprintf("id=%s", id),
+			fmt.Sprintf("path=%s", decodedMap["path"]),
+			fmt.Sprintf("locked-at=%s", decodedMap["locked-at"]),
+			fmt.Sprintf("ownername=%s", decodedMap["ownername"]),
+		}
+
+		return msgs, fmt.Errorf("conflict")
 	} else {
 		uid := syscall.Getuid()
 		user, err := user.LookupId(strconv.Itoa(uid))
@@ -127,13 +139,6 @@ func (fs *Filesystem) listLocks() ([]string, error) {
 
 func (fs *Filesystem) unlockObject() ([]string, error) {
 	var id string
-	var file string
-	for _, arg := range fs.c.req.args {
-		if strings.HasPrefix(arg, "path=") {
-			file = arg[5:]
-		}
-	}
-
 	values := strings.Split(fs.c.req.args[0], " ")
 	if len(values) > 0 {
 		id = values[1]
@@ -148,7 +153,7 @@ func (fs *Filesystem) unlockObject() ([]string, error) {
 
 		msgs := []string{
 			fmt.Sprintf("id=%s", id),
-			fmt.Sprintf("path=%s", file),
+			fmt.Sprintf("path=%s", decodedMap["path"]),
 			fmt.Sprintf("locked-at=%s", decodedMap["locked-at"]),
 			fmt.Sprintf("ownername=%s", decodedMap["ownername"]),
 		}

@@ -392,7 +392,7 @@ func TestSimpleLocking(t *testing.T) {
 	expectedLock := fmt.Sprintf("000eversion=1\n"+
 		"000clocking\n"+
 		"0000000fstatus 200\n"+
-		"0000000fstatus 200\n"+
+		"0000000fstatus 201\n"+
 		"0048id=c7b8de23fd238fe5e16f6f03b844022f9f72fd168a0704d82d58f19cf72b7aa3\n"+
 		"0012path=test.zip\n"+
 		"0023locked-at=%s\n"+
@@ -445,7 +445,7 @@ func TestSimpleLocking(t *testing.T) {
 		"0000000fstatus 200\n"+
 		"0000000fstatus 200\n"+
 		"0048id=c7b8de23fd238fe5e16f6f03b844022f9f72fd168a0704d82d58f19cf72b7aa3\n"+
-		"000apath=\n"+
+		"0012path=test.zip\n"+
 		"0023locked-at=%s\n"+
 		"0012ownername=jan\n"+
 		"0000", locked, locked)
@@ -454,6 +454,40 @@ func TestSimpleLocking(t *testing.T) {
 	Transfer(bytes.NewReader([]byte(inputUnlock)), resultUnlock, []string{"", testDir, "upload"})
 	if expectedUnlock != resultUnlock.String() {
 		t.Errorf("resultUnlock was incorrect\ngot: %s\n\nwant: %s", resultUnlock, expectedUnlock)
+	}
+
+	inputConflictLock := `000eversion 1
+00000009lock
+0012path=test.zip
+001crefname=refs/heads/main
+00000009lock
+0012path=test.zip
+001crefname=refs/heads/main
+0000000elist-lock
+000elimit=100
+0000004cunlock c7b8de23fd238fe5e16f6f03b844022f9f72fd168a0704d82d58f19cf72b7aa3
+0000`
+
+	expectedConflictLock := fmt.Sprintf("000eversion=1\n"+
+		"000clocking\n"+
+		"0000000fstatus 200\n"+
+		"0000000fstatus 201\n"+
+		"0048id=c7b8de23fd238fe5e16f6f03b844022f9f72fd168a0704d82d58f19cf72b7aa3\n"+
+		"0012path=test.zip\n"+
+		"0023locked-at=%s\n"+
+		"0012ownername=jan\n"+
+		"0000000fstatus 409\n"+
+		"00010048id=c7b8de23fd238fe5e16f6f03b844022f9f72fd168a0704d82d58f19cf72b7aa3\n"+
+		"0012path=test.zip\n"+
+		"0023locked-at=%s\n"+
+		"0012ownername=jan\n"+
+		"000dconflict\n"+
+		"0000", locked, locked)
+
+	resultConflictLock := new(bytes.Buffer)
+	Transfer(bytes.NewReader([]byte(inputConflictLock)), resultConflictLock, []string{"", testDir, "upload"})
+	if expectedConflictLock != resultConflictLock.String() {
+		t.Errorf("resultConflictLock was incorrect\ngot: %s\n\nwant: %s", resultConflictLock, expectedConflictLock)
 	}
 
 	cleanup(t)
